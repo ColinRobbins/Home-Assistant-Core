@@ -663,13 +663,24 @@ async def test_cost_sensor_price_entity_total_no_reset(
     assert statistics["stat"][0]["sum"] == 18.0
 
 
-async def test_cost_sensor_handle_wh(hass, hass_storage) -> None:
+@pytest.mark.parametrize(
+    "unit,factor",
+    [
+        (ENERGY_WATT_HOUR, 1000),
+        (ENERGY_KILO_WATT_HOUR, 1),
+        (ENERGY_MEGA_WATT_HOUR, 0.001),
+    ],
+)
+async def test_cost_sensor_handle_energy_units(
+    hass, hass_storage, unit, factor
+) -> None:
     """Test energy cost price from sensor entity."""
     energy_attributes = {
-        ATTR_UNIT_OF_MEASUREMENT: ENERGY_WATT_HOUR,
+        ATTR_UNIT_OF_MEASUREMENT: unit,
         ATTR_STATE_CLASS: STATE_CLASS_TOTAL_INCREASING,
     }
     energy_data = data.EnergyManager.default_preferences()
+    price = 0.5
     energy_data["energy_sources"].append(
         {
             "type": "grid",
@@ -679,7 +690,7 @@ async def test_cost_sensor_handle_wh(hass, hass_storage) -> None:
                     "entity_energy_from": "sensor.energy_consumption",
                     "stat_cost": None,
                     "entity_energy_price": None,
-                    "number_energy_price": 0.5,
+                    "number_energy_price": price,
                 }
             ],
             "flow_to": [],
@@ -694,10 +705,15 @@ async def test_cost_sensor_handle_wh(hass, hass_storage) -> None:
 
     now = dt_util.utcnow()
 
+    price_unit = f"EUR/{unit}"
+    hass.states.async_set(
+        "sensor.energy_price", price, {"unit_of_measurement": price_unit}
+    )
+
     # Initial state: 10kWh
     hass.states.async_set(
         "sensor.energy_consumption",
-        10000,
+        10,
         energy_attributes,
     )
 
@@ -710,75 +726,20 @@ async def test_cost_sensor_handle_wh(hass, hass_storage) -> None:
     # Energy use bumped by 10 kWh
     hass.states.async_set(
         "sensor.energy_consumption",
-        20000,
+        20,
         energy_attributes,
     )
     await hass.async_block_till_done()
 
     state = hass.states.get("sensor.energy_consumption_cost")
-    assert state.state == "5.0"
+    assert float(state.state) == 5.0 / factor
 
 
-async def test_cost_sensor_handle_mwh(hass, hass_storage) -> None:
-    """Test energy cost price from sensor entity."""
-    energy_attributes = {
-        ATTR_UNIT_OF_MEASUREMENT: ENERGY_MEGA_WATT_HOUR,
-        ATTR_STATE_CLASS: STATE_CLASS_TOTAL_INCREASING,
-    }
-    energy_data = data.EnergyManager.default_preferences()
-    energy_data["energy_sources"].append(
-        {
-            "type": "grid",
-            "flow_from": [
-                {
-                    "stat_energy_from": "sensor.energy_consumption",
-                    "entity_energy_from": "sensor.energy_consumption",
-                    "stat_cost": None,
-                    "entity_energy_price": None,
-                    "number_energy_price": 2.0,
-                }
-            ],
-            "flow_to": [],
-            "cost_adjustment_day": 0,
-        }
-    )
-
-    hass_storage[data.STORAGE_KEY] = {
-        "version": 1,
-        "data": energy_data,
-    }
-
-    now = dt_util.utcnow()
-
-    # Initial state: 0.5MWh
-    hass.states.async_set(
-        "sensor.energy_consumption",
-        0.5,
-        energy_attributes,
-    )
-
-    with patch("homeassistant.util.dt.utcnow", return_value=now):
-        await setup_integration(hass)
-
-    state = hass.states.get("sensor.energy_consumption_cost")
-    assert state.state == "0.0"
-
-    # Energy use bumped by 1 MWh
-    hass.states.async_set(
-        "sensor.energy_consumption",
-        1.5,
-        energy_attributes,
-    )
-    await hass.async_block_till_done()
-
-    state = hass.states.get("sensor.energy_consumption_cost")
-    assert state.state == "2.0"
-
-
-async def test_cost_sensor_handle_gas(hass, hass_storage) -> None:
+@pytest.mark.parametrize("unit", [ENERGY_KILO_WATT_HOUR, VOLUME_CUBIC_METERS])
+async def test_cost_sensor_handle_gas(hass, hass_storage, unit) -> None:
     """Test gas cost price from sensor entity."""
     energy_attributes = {
-        ATTR_UNIT_OF_MEASUREMENT: VOLUME_CUBIC_METERS,
+        ATTR_UNIT_OF_MEASUREMENT: unit,
         ATTR_STATE_CLASS: STATE_CLASS_TOTAL_INCREASING,
     }
     energy_data = data.EnergyManager.default_preferences()
@@ -806,53 +767,9 @@ async def test_cost_sensor_handle_gas(hass, hass_storage) -> None:
         energy_attributes,
     )
 
-    with patch("homeassistant.util.dt.utcnow", return_value=now):
-        await setup_integration(hass)
-
-    state = hass.states.get("sensor.gas_consumption_cost")
-    assert state.state == "0.0"
-
-    # gas use bumped to 10 kWh
+    price_unit = f"EUR/{unit}"
     hass.states.async_set(
-        "sensor.gas_consumption",
-        200,
-        energy_attributes,
-    )
-    await hass.async_block_till_done()
-
-    state = hass.states.get("sensor.gas_consumption_cost")
-    assert state.state == "50.0"
-
-
-async def test_cost_sensor_handle_gas_kwh(hass, hass_storage) -> None:
-    """Test gas cost price from sensor entity."""
-    energy_attributes = {
-        ATTR_UNIT_OF_MEASUREMENT: ENERGY_KILO_WATT_HOUR,
-        ATTR_STATE_CLASS: STATE_CLASS_TOTAL_INCREASING,
-    }
-    energy_data = data.EnergyManager.default_preferences()
-    energy_data["energy_sources"].append(
-        {
-            "type": "gas",
-            "stat_energy_from": "sensor.gas_consumption",
-            "entity_energy_from": "sensor.gas_consumption",
-            "stat_cost": None,
-            "entity_energy_price": None,
-            "number_energy_price": 0.5,
-        }
-    )
-
-    hass_storage[data.STORAGE_KEY] = {
-        "version": 1,
-        "data": energy_data,
-    }
-
-    now = dt_util.utcnow()
-
-    hass.states.async_set(
-        "sensor.gas_consumption",
-        100,
-        energy_attributes,
+        "sensor.energy_price", "0.5", {"unit_of_measurement": price_unit}
     )
 
     with patch("homeassistant.util.dt.utcnow", return_value=now):

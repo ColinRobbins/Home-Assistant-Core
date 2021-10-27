@@ -292,14 +292,10 @@ class EnergyCostSensor(SensorEntity):
             except ValueError:
                 return
 
-            if energy_price_state.attributes.get(ATTR_UNIT_OF_MEASUREMENT, "").endswith(
-                f"/{ENERGY_WATT_HOUR}"
-            ):
+            unit = energy_price_state.attributes.get(ATTR_UNIT_OF_MEASUREMENT, "")
+            if unit.endswith(f"/{ENERGY_WATT_HOUR}"):
                 energy_price *= 1000.0
-
-            if energy_price_state.attributes.get(ATTR_UNIT_OF_MEASUREMENT, "").endswith(
-                f"/{ENERGY_MEGA_WATT_HOUR}"
-            ):
+            elif unit.endswith(f"/{ENERGY_MEGA_WATT_HOUR}"):
                 energy_price /= 1000.0
 
         else:
@@ -324,7 +320,7 @@ class EnergyCostSensor(SensorEntity):
         if energy_unit == ENERGY_WATT_HOUR:
             energy_price /= 1000
         elif energy_unit == ENERGY_MEGA_WATT_HOUR:
-            energy_unit *= 1000
+            energy_price *= 1000
 
         if energy_unit is None:
             if not self._wrong_unit_reported:
