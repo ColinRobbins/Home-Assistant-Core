@@ -44,7 +44,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     system_info = await hass.async_add_executor_job(ruckus.system_info)
 
-    registry = await device_registry.async_get_registry(hass)
+    registry = device_registry.async_get(hass)
     ap_info = await hass.async_add_executor_job(ruckus.ap_info)
     for device in ap_info[API_AP][API_ID].values():
         registry.async_get_or_create(
@@ -63,7 +63,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         UNDO_UPDATE_LISTENERS: [],
     }
 
-    hass.config_entries.async_setup_platforms(entry, PLATFORMS)
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
 

@@ -1,45 +1,36 @@
 """Offer time listening automation rules."""
-from datetime import datetime, timedelta
+from datetime import datetime
 from functools import partial
 
 import voluptuous as vol
 
 from homeassistant.components import sensor
+from homeassistant.components.automation import (
+    AutomationActionType,
+    AutomationTriggerInfo,
+)
 from homeassistant.const import (
     ATTR_DEVICE_CLASS,
     CONF_AT,
-    CONF_ENTITY_ID,
-    CONF_OFFSET,
     CONF_PLATFORM,
     STATE_UNAVAILABLE,
     STATE_UNKNOWN,
 )
-from homeassistant.core import HassJob, callback
+from homeassistant.core import CALLBACK_TYPE, HassJob, HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.event import (
     async_track_point_in_time,
     async_track_state_change_event,
     async_track_time_change,
 )
+from homeassistant.helpers.typing import ConfigType
 import homeassistant.util.dt as dt_util
 
 # mypy: allow-untyped-defs, no-check-untyped-defs
 
-_TIME_TRIGGER_ENTITY_REFERENCE = vol.All(
-    str, cv.entity_domain(["input_datetime", "sensor"])
-)
-
-_TIME_TRIGGER_WITH_OFFSET_SCHEMA = vol.Schema(
-    {
-        vol.Required(CONF_ENTITY_ID): _TIME_TRIGGER_ENTITY_REFERENCE,
-        vol.Required(CONF_OFFSET): cv.time_period,
-    }
-)
-
 _TIME_TRIGGER_SCHEMA = vol.Any(
     cv.time,
-    _TIME_TRIGGER_ENTITY_REFERENCE,
-    _TIME_TRIGGER_WITH_OFFSET_SCHEMA,
+    vol.All(str, cv.entity_domain(["input_datetime", "sensor"])),
     msg="Expected HH:MM, HH:MM:SS or Entity ID with domain 'input_datetime' or 'sensor'",
 )
 
@@ -51,13 +42,17 @@ TRIGGER_SCHEMA = cv.TRIGGER_BASE_SCHEMA.extend(
 )
 
 
-async def async_attach_trigger(hass, config, action, automation_info):
+async def async_attach_trigger(
+    hass: HomeAssistant,
+    config: ConfigType,
+    action: AutomationActionType,
+    automation_info: AutomationTriggerInfo,
+) -> CALLBACK_TYPE:
     """Listen for state changes based on configuration."""
     trigger_data = automation_info["trigger_data"]
-    entities = {}
+    entities: dict[str, CALLBACK_TYPE] = {}
     removes = []
     job = HassJob(action)
-    offsets = {}
 
     @callback
     def time_automation_listener(description, now, *, entity_id=None):
@@ -84,15 +79,12 @@ async def async_attach_trigger(hass, config, action, automation_info):
     def update_entity_trigger(entity_id, new_state=None):
         """Update the entity trigger for the entity_id."""
         # If a listener was already set up for entity, remove it.
-        remove = entities.pop(entity_id, None)
-        if remove:
+        if remove := entities.pop(entity_id, None):
             remove()
             remove = None
 
         if not new_state:
             return
-
-        offset = offsets[entity_id] if entity_id in offsets else timedelta(0)
 
         # Check state of entity. If valid, set up a listener.
         if new_state.domain == "input_datetime":
@@ -110,17 +102,14 @@ async def async_attach_trigger(hass, config, action, automation_info):
 
             if has_date:
                 # If input_datetime has date, then track point in time.
-                trigger_dt = (
-                    datetime(
-                        year,
-                        month,
-                        day,
-                        hour,
-                        minute,
-                        second,
-                        tzinfo=dt_util.DEFAULT_TIME_ZONE,
-                    )
-                    + offset
+                trigger_dt = datetime(
+                    year,
+                    month,
+                    day,
+                    hour,
+                    minute,
+                    second,
+                    tzinfo=dt_util.DEFAULT_TIME_ZONE,
                 )
                 # Only set up listener if time is now or in the future.
                 if trigger_dt >= dt_util.now():
@@ -149,10 +138,10 @@ async def async_attach_trigger(hass, config, action, automation_info):
         elif (
             new_state.domain == "sensor"
             and new_state.attributes.get(ATTR_DEVICE_CLASS)
-            == sensor.DEVICE_CLASS_TIMESTAMP
+            == sensor.SensorDeviceClass.TIMESTAMP
             and new_state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN)
         ):
-            trigger_dt = dt_util.parse_datetime(new_state.state) + offset
+            trigger_dt = dt_util.parse_datetime(new_state.state)
 
             if trigger_dt is not None and trigger_dt > dt_util.utcnow():
                 remove = async_track_point_in_time(
@@ -176,15 +165,6 @@ async def async_attach_trigger(hass, config, action, automation_info):
             # entity
             to_track.append(at_time)
             update_entity_trigger(at_time, new_state=hass.states.get(at_time))
-        elif isinstance(at_time, dict) and CONF_OFFSET in at_time:
-            # entity with offset
-            entity_id = at_time.get(CONF_ENTITY_ID)
-            to_track.append(entity_id)
-            offsets[entity_id] = at_time.get(CONF_OFFSET)
-            update_entity_trigger(
-                entity_id,
-                new_state=hass.states.get(entity_id),
-            )
         else:
             # datetime.time
             removes.append(

@@ -2,7 +2,7 @@
 from logging import INFO
 from unittest.mock import patch
 
-from aurorapy.client import AuroraError
+from aurorapy.client import AuroraError, AuroraTimeoutError
 from serial.tools import list_ports_common
 
 from homeassistant import config_entries, data_entry_flow, setup
@@ -13,6 +13,8 @@ from homeassistant.components.aurora_abb_powerone.const import (
     DOMAIN,
 )
 from homeassistant.const import CONF_ADDRESS, CONF_PORT
+
+TEST_DATA = {"device": "/dev/ttyUSB7", "address": 3, "name": "MyAuroraPV"}
 
 
 async def test_form(hass):
@@ -56,7 +58,7 @@ async def test_form(hass):
             {CONF_PORT: "/dev/ttyUSB7", CONF_ADDRESS: 7},
         )
 
-    assert result2["type"] == data_entry_flow.RESULT_TYPE_CREATE_ENTRY
+    assert result2["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
 
     assert result2["data"] == {
         CONF_PORT: "/dev/ttyUSB7",
@@ -125,7 +127,7 @@ async def test_form_invalid_com_ports(hass):
 
     with patch(
         "aurorapy.client.AuroraSerialClient.connect",
-        side_effect=AuroraError("...No response after..."),
+        side_effect=AuroraTimeoutError("...No response after..."),
         return_value=None,
     ):
         result2 = await hass.config_entries.flow.async_configure(
@@ -147,19 +149,3 @@ async def test_form_invalid_com_ports(hass):
         )
     assert result2["errors"] == {"base": "cannot_connect"}
     assert len(mock_clientclose.mock_calls) == 1
-
-
-# Tests below can be deleted after deprecation period is finished.
-async def test_import(hass):
-    """Test configuration.yaml import used during migration."""
-    TESTDATA = {"device": "/dev/ttyUSB7", "address": 3, "name": "MyAuroraPV"}
-    with patch(
-        "homeassistant.components.generic.camera.GenericCamera.async_camera_image",
-        return_value=None,
-    ):
-        result = await hass.config_entries.flow.async_init(
-            DOMAIN, context={"source": config_entries.SOURCE_IMPORT}, data=TESTDATA
-        )
-    assert result["type"] == data_entry_flow.RESULT_TYPE_CREATE_ENTRY
-    assert result["data"][CONF_PORT] == "/dev/ttyUSB7"
-    assert result["data"][CONF_ADDRESS] == 3

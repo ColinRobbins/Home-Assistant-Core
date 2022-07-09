@@ -199,7 +199,7 @@ class ComponentFactory:
                 "redirect_uri": "http://127.0.0.1:8080/auth/external/callback",
             },
         )
-        assert result["type"] == data_entry_flow.RESULT_TYPE_EXTERNAL_STEP
+        assert result["type"] == data_entry_flow.FlowResultType.EXTERNAL_STEP
         assert result["url"] == (
             "https://account.withings.com/oauth2_user/authorize2?"
             f"response_type=code&client_id={self._client_id}&"
@@ -216,13 +216,15 @@ class ComponentFactory:
 
         self._aioclient_mock.clear_requests()
         self._aioclient_mock.post(
-            "https://account.withings.com/oauth2/token",
+            "https://wbsapi.withings.net/v2/oauth2",
             json={
-                "refresh_token": "mock-refresh-token",
-                "access_token": "mock-access-token",
-                "type": "Bearer",
-                "expires_in": 60,
-                "userid": profile_config.user_id,
+                "body": {
+                    "refresh_token": "mock-refresh-token",
+                    "access_token": "mock-access-token",
+                    "type": "Bearer",
+                    "expires_in": 60,
+                    "userid": profile_config.user_id,
+                },
             },
         )
 

@@ -7,7 +7,7 @@ import logging
 from mcstatus.server import MinecraftServer as MCStatus
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
+from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT, Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import (
     async_dispatcher_connect,
@@ -20,7 +20,7 @@ from homeassistant.helpers.typing import ConfigType
 from . import helpers
 from .const import DOMAIN, MANUFACTURER, SCAN_INTERVAL, SIGNAL_NAME_PREFIX
 
-PLATFORMS = ["binary_sensor", "sensor"]
+PLATFORMS = [Platform.BINARY_SENSOR, Platform.SENSOR]
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     server.start_periodic_update()
 
     # Set up platforms.
-    hass.config_entries.async_setup_platforms(entry, PLATFORMS)
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
 
@@ -95,6 +95,7 @@ class MinecraftServer:
         self.players_online = None
         self.players_max = None
         self.players_list = None
+        self.motd = None
 
         # Dispatcher signal name
         self.signal_name = f"{SIGNAL_NAME_PREFIX}_{self.unique_id}"
@@ -179,6 +180,7 @@ class MinecraftServer:
             self.players_online = status_response.players.online
             self.players_max = status_response.players.max
             self.latency_time = status_response.latency
+            self.motd = (status_response.description).get("text")
             self.players_list = []
             if status_response.players.sample is not None:
                 for player in status_response.players.sample:
@@ -201,6 +203,7 @@ class MinecraftServer:
             self.players_max = None
             self.latency_time = None
             self.players_list = None
+            self.motd = None
 
             # Inform user once about failed update if necessary.
             if not self._last_status_request_failed:

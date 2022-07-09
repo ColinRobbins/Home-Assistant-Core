@@ -5,8 +5,8 @@ from functools import partial
 
 from homeassistant.components.number import NumberEntity, NumberEntityDescription
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import ENTITY_CATEGORY_CONFIG
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import ATTR_INTENSITY, ATTR_SPEED, DOMAIN
@@ -40,22 +40,24 @@ NUMBERS = [
         key=ATTR_SPEED,
         name="Speed",
         icon="mdi:speedometer",
-        entity_category=ENTITY_CATEGORY_CONFIG,
+        entity_category=EntityCategory.CONFIG,
+        native_step=1,
+        native_min_value=0,
+        native_max_value=255,
     ),
     NumberEntityDescription(
         key=ATTR_INTENSITY,
         name="Intensity",
-        entity_category=ENTITY_CATEGORY_CONFIG,
+        entity_category=EntityCategory.CONFIG,
+        native_step=1,
+        native_min_value=0,
+        native_max_value=255,
     ),
 ]
 
 
 class WLEDNumber(WLEDEntity, NumberEntity):
     """Defines a WLED speed number."""
-
-    _attr_step = 1
-    _attr_min_value = 0
-    _attr_max_value = 255
 
     def __init__(
         self,
@@ -91,7 +93,7 @@ class WLEDNumber(WLEDEntity, NumberEntity):
         return super().available
 
     @property
-    def value(self) -> float | None:
+    def native_value(self) -> float | None:
         """Return the current WLED segment number value."""
         return getattr(
             self.coordinator.data.state.segments[self._segment],
@@ -99,7 +101,7 @@ class WLEDNumber(WLEDEntity, NumberEntity):
         )
 
     @wled_exception_handler
-    async def async_set_value(self, value: float) -> None:
+    async def async_set_native_value(self, value: float) -> None:
         """Set the WLED segment value."""
         key = self.entity_description.key
         if key == ATTR_SPEED:
@@ -107,7 +109,7 @@ class WLEDNumber(WLEDEntity, NumberEntity):
                 segment_id=self._segment, speed=int(value)
             )
         elif key == ATTR_INTENSITY:
-            return await self.coordinator.wled.segment(
+            await self.coordinator.wled.segment(
                 segment_id=self._segment, intensity=int(value)
             )
 

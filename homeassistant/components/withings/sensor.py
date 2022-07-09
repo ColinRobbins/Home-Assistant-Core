@@ -19,7 +19,6 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the sensor config entry."""
-
     entities = await async_create_entities(
         hass,
         entry,
